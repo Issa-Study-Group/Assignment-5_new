@@ -1,0 +1,95 @@
+---
+title: "Assignment 5 - Meta-analysis of pitch in schizophrenia"
+author: "Kristian Severin, Lasse Hansen, Nikolaj Munch & Sarah Nielsen"
+date: "26/11/2020"
+output: html_document
+---
+
+```{r loading packages}
+#loading packages
+pacman::p_load("tidyverse", "metafor", "dplyr", "lme4", "lmerTest")
+install.packages("metafor")
+```
+
+```{r}
+#Loading data
+data1 <- readxl::read_xlsx("Kristianetal.xlsx")
+```
+
+```{r preprocessing the data}
+#as tibble
+DataN <- as.tibble(data1)
+
+#selecting columns 
+DataN <- select(DataN, 1:7, 9:13, 27, 69:73)
+
+#As numeric
+DataN$MALE_HC <- as.numeric(DataN$MALE_HC)
+DataN$FEMALE_HC <- as.numeric(DataN$FEMALE_HC)
+
+DataN$MALE_SZ <- as.numeric(DataN$MALE_SZ)
+DataN$FEMALE_SZ <- as.numeric(DataN$FEMALE_SZ)
+
+
+#Adding columns with n_controls and n_SZ
+DataN$n_controls <- (DataN$MALE_HC + DataN$FEMALE_HC)
+
+DataN$n_SZ <- (DataN$MALE_SZ + DataN$FEMALE_SZ)
+```
+
+```{r calculating effect size and variance}
+#calculating effects sizes and their variance
+DataN <- escalc(n1i = n_controls, n2i = n_SZ, m1i = PITCH_F0_HC_M, m2i = PITCH_F0_SZ_M, 
+    sd1i = PITCH_F0_HC_SD, sd2i = PITCH_F0_SZ_SD, data = DataN, measure = "SMD", 
+    append = TRUE)
+
+#Moving columns to the front
+DataN <- DataN %>% select(n_SZ, yi, vi, n_controls, everything(DataN))
+```
+
+```{r running models}
+#Model
+m <- lmer(yi ~ 1 + (1 | StudyID), weights = 1/vi, data=DataN, control=lmerControl(check.nobs.vs.nlev="ignore", check.nobs.vs.nRE="ignore"))
+
+summary(m)
+
+#Forest plot and model 2
+m2 <-rma (yi, vi, data = DataN, slab = StudyID)
+forest(m2)
+
+summary(m2)
+
+#More models
+m3 <- lmer(yi ~ 1 + StudyID+ (1 | StudyID), weights = 1/vi, data=DataN, control=lmerControl(check.nobs.vs.nlev="ignore", check.nobs.vs.nRE="ignore"))
+m4 <- rma(yi, vi, data = DataN, slab=StudyID)
+
+DataN$TYPE_OF_TASK <- as.factor(DataN$TYPE_OF_TASK)
+m5 <- lmer(yi ~ 1 + TYPE_OF_TASK + (1 | StudyID), weights = 1/vi, DataN, control=lmerControl(check.nobs.vs.nlev="ignore", check.nobs.vs.nRE="ignore", optimizer = "Nelder_Mead"))
+summary(m5)
+
+### fit fixed-effects model
+res <- rma(yi, vi, data=DataN, measure="OR", method="FE")
+ 
+### set up 2x2 array for plotting
+par(mfrow=c(2,2))
+ 
+### draw funnel plots
+funnel(res, main="Standard Error")
+funnel(res, yaxis="vi", main="Sampling Variance")
+funnel(res, yaxis="seinv", main="Inverse Standard Error")
+funnel(res, yaxis="vinv", main="Inverse Sampling Variance")
+
+```
+
+```{r Influence plots}
+inf <- influence(m2)
+print(inf)
+plot(inf)
+```
+
+
+
+
+
+
+
